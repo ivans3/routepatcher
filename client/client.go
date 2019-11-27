@@ -2,14 +2,16 @@ package client
 
 import (
 	"log"
-	"os"
-        "flag"
+	//"os"
+        //"flag"
+        "fmt"
 
 	versionedclient "github.com/aspenmesh/istio-client-go/pkg/client/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/clientcmd"
+	//"k8s.io/client-go/tools/clientcmd"
 	"istio.io/api/networking/v1alpha3"
         "k8s.io/client-go/rest"
+        v1alpha3aspen "github.com/aspenmesh/istio-client-go/pkg/apis/networking/v1alpha3"
 )
 
 func SomethingExported()   {
@@ -84,73 +86,55 @@ func deleteRoute(routes []*v1alpha3.HTTPRoute,versiontodelete string) []*v1alpha
         return retval
 }
 
+func (c *RoutepatcherClient) updateVirtualService(namespace string, vs *v1alpha3aspen.VirtualService, newRoutes []*v1alpha3.HTTPRoute) error   {
+        log.Printf("Attempting to update VirtualService resource, newRoutes=%s\n",newRoutes)
+        //Update resource:
+        vs.Spec.Http = newRoutes
+	_, updateErr := c.IstioClient.NetworkingV1alpha3().VirtualServices(namespace).Update(vs)
+	if updateErr != nil {
+		log.Printf("Failed to update VirtualService in %s namespace: %s", namespace, updateErr)
+                return updateErr
+	}
+        return nil
+}
+
+func (c *RoutepatcherClient) updateDestinationRule(namespace string, dr *v1alpha3aspen.DestinationRule, newSubsets []*v1alpha3.Subset) error  {
+        log.Printf("Attempting to update DestinationRule resource, newSubsets=%s\n",newSubsets)
+
+        dr.Spec.Subsets = newSubsets
+	_, updateErr2 := c.IstioClient.NetworkingV1alpha3().DestinationRules(namespace).Update(dr)
+	if updateErr2 != nil {
+		log.Printf("Failed to update DestinationRule in %s namespace: %s", namespace, updateErr2)
+                return updateErr2
+	}
+        return nil
+}
+
 
 type RoutepatcherClient struct {
 	IstioClient *versionedclient.Clientset
 }
 
 //create a new receiver object:
-func New(restConfig *rest.Config) *RoutepatcherClient  {
+func New(restConfig *rest.Config) (*RoutepatcherClient,error)  {
 	ic, err := versionedclient.NewForConfig(restConfig)
 	if err != nil {
-		log.Fatalf("Failed to create istio client: %s", err)
+                return nil, err
 	}
         return &RoutepatcherClient{ 
-            IstioClient: ic}
+            IstioClient: ic}, nil
 }
 
-func (c *RoutepatcherClient) AddRoute(namespace *string, vsName *string, version *string) error  {
-  return nil
-}
-
-func (c *RoutepatcherClient) DeleteRoute(namespace *string, vsName *string, version *string) error  {
-  return nil
-}
-
-/*
-func main() {
-
-        namespacePtr := flag.String("namespace", "default", "the namespace")
-        removeFlagPtr := flag.Bool("delete", false, "delete the route")
-        flag.Parse()
-        namespace := *namespacePtr
-        if len(flag.Args()) != 2 {
-                log.Fatalf("usage: routeswitcher [--namespace=default] [--delete] <virtual svc name> <version>")
-        }
-        vsName := flag.Args()[0]
-        version := flag.Args()[1]
-
-        log.Printf("Starting, vsName=%s, version=%s, removeFlag=%s\n",vsName,version,*removeFlagPtr)
-
-	kubeconfig := os.Getenv("KUBECONFIG")
-        var restConfig *rest.Config
-        var err error
-	if len(kubeconfig) > 0 {
-        	restConfig, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-        	if err != nil {
-        		log.Fatalf("Failed to create k8s rest client: %s", err)
-        	}
-        } else {
-        	restConfig, err = rest.InClusterConfig()
-        	if err != nil {
-        		log.Fatalf("Failed to create k8s in-cluster config: %s", err)
-        	}
-        }
-
-
-	ic, err := versionedclient.NewForConfig(restConfig)
-	if err != nil {
-		log.Fatalf("Failed to create istio client: %s", err)
-	}
+func (c *RoutepatcherClient) AddRoute(namespace string, vsName string, version string) error  {
 	// 1. get VirtualService and DestinationRule
-	vs, err := ic.NetworkingV1alpha3().VirtualServices(namespace).Get(vsName, metav1.GetOptions{})
+	vs, err := c.IstioClient.NetworkingV1alpha3().VirtualServices(namespace).Get(vsName, metav1.GetOptions{})
 	if err != nil {
 		log.Fatalf("Failed to get VirtualService in %s namespace: %s", namespace, err)
 	}
 	log.Printf("Found VirtualService named %s: Hosts: %+v\n", vs.GetName(), vs.Spec.GetHosts())
 	theHttp := vs.Spec.GetHttp()
 	log.Printf("theHttp: %s\n", theHttp)
-	dr, err := ic.NetworkingV1alpha3().DestinationRules(namespace).Get(vsName, metav1.GetOptions{})
+	dr, err := c.IstioClient.NetworkingV1alpha3().DestinationRules(namespace).Get(vsName, metav1.GetOptions{})
 	if err != nil {
 		log.Fatalf("Failed to get DestinationRule in %s namespace: %s", namespace, err)
 	}
@@ -158,29 +142,62 @@ func main() {
 	theSubsets := dr.Spec.GetSubsets()
 	log.Printf("theSubsets: %s\n", theSubsets)
 
+        //Manipulate the HTTP routes and destinationrule subsets:
         var newRoutes []*v1alpha3.HTTPRoute
         var newSubsets []*v1alpha3.Subset
-	//2. if action=='prepend':
-        if (! *removeFlagPtr)  {
-	  newRoutes = prependNewRoute(theHttp, version)
-          newSubsets = prependNewSubset(theSubsets, version)
-        } else {
-          newRoutes = deleteRoute(theHttp, version)
-          newSubsets = deleteSubset(theSubsets, version)
+	newRoutes = prependNewRoute(theHttp, version)
+        newSubsets = prependNewSubset(theSubsets, version)
+
+        //Post the updates back to the apiserver:
+        fmt.Printf("WILL POST BACk: %s %s\n",newRoutes,newSubsets)
+        //5. post update vservice  [common]
+        if theErr := c.updateVirtualService(namespace, vs, newRoutes); theErr != nil { 
+            log.Fatalf("Couldnt update virtual service: %s", theErr)
         }
+        //6. post update drule  [common]
+        if theErr := c.updateDestinationRule(namespace, dr, newSubsets); theErr != nil { 
+            log.Fatalf("Couldnt update virtual service: %s", theErr)
+        }
+        
 
-        log.Printf("Attempting to update resources, newRoutes=%s, newSubsets=%s\n",newRoutes,newSubsets)
-        //Update resource:
-        vs.Spec.Http = newRoutes
-	_, updateErr := ic.NetworkingV1alpha3().VirtualServices(namespace).Update(vs)
-	if updateErr != nil {
-		log.Fatalf("Failed to update VirtualService in %s namespace: %s", namespace, updateErr)
-	}
-
-        dr.Spec.Subsets = newSubsets
-	_, updateErr2 := ic.NetworkingV1alpha3().DestinationRules(namespace).Update(dr)
-	if updateErr2 != nil {
-		log.Fatalf("Failed to update DestinationRule in %s namespace: %s", namespace, updateErr)
-	}
+  return nil
 }
-*/
+
+func (c *RoutepatcherClient) DeleteRoute(namespace string, vsName string, version string) error  {
+	// 1. get VirtualService and DestinationRule
+	vs, err := c.IstioClient.NetworkingV1alpha3().VirtualServices(namespace).Get(vsName, metav1.GetOptions{})
+	if err != nil {
+		log.Fatalf("Failed to get VirtualService in %s namespace: %s", namespace, err)
+	}
+	log.Printf("Found VirtualService named %s: Hosts: %+v\n", vs.GetName(), vs.Spec.GetHosts())
+	theHttp := vs.Spec.GetHttp()
+	log.Printf("theHttp: %s\n", theHttp)
+	dr, err := c.IstioClient.NetworkingV1alpha3().DestinationRules(namespace).Get(vsName, metav1.GetOptions{})
+	if err != nil {
+		log.Fatalf("Failed to get DestinationRule in %s namespace: %s", namespace, err)
+	}
+	log.Printf("Found DestinationRule named %s\n", dr.GetName())
+	theSubsets := dr.Spec.GetSubsets()
+	log.Printf("theSubsets: %s\n", theSubsets)
+
+        //Manipulate the HTTP routes and destinationrule subsets:
+        var newRoutes []*v1alpha3.HTTPRoute
+        var newSubsets []*v1alpha3.Subset
+        //TODO: check that the delete actually worked:
+        newRoutes = deleteRoute(theHttp, version)
+        newSubsets = deleteSubset(theSubsets, version)
+
+        //Post the updates back to the apiserver:
+        fmt.Printf("WILL POST BAC: %s %s\n",newRoutes,newSubsets)
+        //5. post updated vservice  
+        if theErr := c.updateVirtualService(namespace, vs, newRoutes); theErr != nil { 
+            log.Fatalf("Couldnt update virtual service: %s", theErr)
+        }
+        //6. post updated drule  
+        if theErr := c.updateDestinationRule(namespace, dr, newSubsets); theErr != nil { 
+            log.Fatalf("Couldnt update virtual service: %s", theErr)
+        }
+        
+        return nil
+}
+
