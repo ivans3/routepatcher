@@ -90,24 +90,20 @@ type RoutepatcherClient struct {
 }
 
 //create a new receiver object:
-func New(restConfig *rest.Config) *RoutepatcherClient
-{
+func New(restConfig *rest.Config) *RoutepatcherClient  {
 	ic, err := versionedclient.NewForConfig(restConfig)
 	if err != nil {
 		log.Fatalf("Failed to create istio client: %s", err)
 	}
         return &RoutepatcherClient{ 
             IstioClient: ic}
- 
 }
 
-func (c *RoutepatcherClient) AddRoute(namespace *string, vsName *string, version *string) error
-{
+func (c *RoutepatcherClient) AddRoute(namespace *string, vsName *string, version *string) error  {
   return nil
 }
 
-func (c *RoutepatcherClient) DeleteRoute(namespace *string, vsName *string, version *string) error
-{
+func (c *RoutepatcherClient) DeleteRoute(namespace *string, vsName *string, version *string) error  {
   return nil
 }
 
