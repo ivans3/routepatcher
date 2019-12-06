@@ -35,7 +35,7 @@ func prependNewRoute(routes []*v1alpha3.HTTPRoute,newversion string) []*v1alpha3
         //Note: could also look for a HTTP Route without a "match:" part ...
 	var template *v1alpha3.HTTPRoute 
         for _, s := range routes {
-	  if s.Route[0].Destination.Subset == "v1" {
+	  if s.Route[0].Destination.Subset == "default" {
 		  template=s
 	  } 
           if s.Route[0].Destination.Subset == newversion { 
