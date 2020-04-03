@@ -6,12 +6,14 @@ import (
         //"flag"
         "fmt"
 
-	versionedclient "github.com/aspenmesh/istio-client-go/pkg/client/clientset/versioned"
+	//versionedclient "github.com/aspenmesh/istio-client-go/pkg/client/clientset/versioned"
+        versionedclient "istio.io/client-go/pkg/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	//"k8s.io/client-go/tools/clientcmd"
 	"istio.io/api/networking/v1alpha3"
         "k8s.io/client-go/rest"
-        v1alpha3aspen "github.com/aspenmesh/istio-client-go/pkg/apis/networking/v1alpha3"
+        //v1alpha3aspen "github.com/aspenmesh/istio-client-go/pkg/apis/networking/v1alpha3"
+        v1alpha3aspen "istio.io/client-go/pkg/apis/networking/v1alpha3"
 )
 
 func SomethingExported()   {
@@ -30,16 +32,17 @@ func prependNewSubset(subsets []*v1alpha3.Subset,newversion string) []*v1alpha3.
         return append([]*v1alpha3.Subset{&newSubset}, subsets...)
 }
 
+//Prepend a new item to the array routes, and add a source label to the match for the new item...
 func prependNewRoute(routes []*v1alpha3.HTTPRoute,newversion string) []*v1alpha3.HTTPRoute {
 	//1. get the HTTP Route for subset v1 and use it as a template
         //Note: could also look for a HTTP Route without a "match:" part ...
 	var template *v1alpha3.HTTPRoute 
         for _, s := range routes {
-	  if s.Route[0].Destination.Subset == "default" {
-		  template=s
-	  } 
+   	      if s.Route[0].Destination.Subset == "default" {
+   	      	template=s
+	      }
           if s.Route[0].Destination.Subset == newversion { 
-                  log.Fatalf("Route already present! Aborting!")
+          	log.Fatalf("Route already present! Aborting!")
           }
         }
         if template != nil  {
@@ -55,7 +58,10 @@ func prependNewRoute(routes []*v1alpha3.HTTPRoute,newversion string) []*v1alpha3
         newRoute.Route = []*v1alpha3.HTTPRouteDestination{&httpRouteDestinationCopy}
         newHeaders := make (map[string]*v1alpha3.StringMatch)
         newHeaders["branch"] = &v1alpha3.StringMatch{ MatchType: &v1alpha3.StringMatch_Exact{Exact: newversion}}
-        newRoute.Match = []*v1alpha3.HTTPMatchRequest{ &v1alpha3.HTTPMatchRequest{Headers: newHeaders}}
+
+        newRoute.Match = []*v1alpha3.HTTPMatchRequest{ {Headers: newHeaders}, {
+        	SourceLabels: map[string]string{"version": newversion}}}
+
         return append([]*v1alpha3.HTTPRoute{&newRoute}, routes...)
 }
 
