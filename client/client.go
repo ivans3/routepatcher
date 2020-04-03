@@ -2,6 +2,8 @@ package client
 
 import (
 	"log"
+	"os"
+
 	//"os"
         //"flag"
         "fmt"
@@ -24,7 +26,9 @@ func prependNewSubset(subsets []*v1alpha3.Subset,newversion string) []*v1alpha3.
         //1. check if already exists
         for _, s := range subsets {
           if s.Name == newversion {
-                  log.Fatalf("subset already exists, Aborting!")
+              //    log.Fatalf("subset already exists, Aborting!")
+			  log.Printf("Route already present! Exiting")
+			  os.Exit(0)
           } 
         }
         //2. construct new subset item
@@ -42,7 +46,9 @@ func prependNewRoute(routes []*v1alpha3.HTTPRoute,newversion string) []*v1alpha3
    	      	template=s
 	      }
           if s.Route[0].Destination.Subset == newversion { 
-          	log.Fatalf("Route already present! Aborting!")
+          	//log.Fatalf("Route already present! Aborting!")
+          	log.Printf("Route already present! Exiting")
+          	os.Exit(0)
           }
         }
         if template != nil  {
