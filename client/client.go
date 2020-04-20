@@ -18,9 +18,6 @@ import (
         v1alpha3aspen "istio.io/client-go/pkg/apis/networking/v1alpha3"
 )
 
-func SomethingExported()   {
-    fmt.Println("Hey2\n")
-}
 
 func prependNewSubset(subsets []*v1alpha3.Subset,newversion string) []*v1alpha3.Subset  {
         //1. check if already exists
@@ -63,7 +60,7 @@ func prependNewRoute(routes []*v1alpha3.HTTPRoute,newversion string) []*v1alpha3
         newRoute := *template
         newRoute.Route = []*v1alpha3.HTTPRouteDestination{&httpRouteDestinationCopy}
         newHeaders := make (map[string]*v1alpha3.StringMatch)
-        newHeaders["branch"] = &v1alpha3.StringMatch{ MatchType: &v1alpha3.StringMatch_Exact{Exact: newversion}}
+        newHeaders["x-preview-user"] = &v1alpha3.StringMatch{ MatchType: &v1alpha3.StringMatch_Exact{Exact: newversion}}
 
         newRoute.Match = []*v1alpha3.HTTPMatchRequest{ {Headers: newHeaders}, {
         	SourceLabels: map[string]string{"version": newversion}}}
